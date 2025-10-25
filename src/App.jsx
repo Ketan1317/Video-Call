@@ -4,71 +4,79 @@ import Peer from "peerjs";
 const App = () => {
   const [peerId, setPeerId] = useState(null);
   const [remotePeerId, setRemotePeerId] = useState("");
+  const [currentCall, setCurrentCall] = useState(null); // Store the active call
 
-  // Reference to hold the PeerJS instance
   const peerInstance = useRef(null);
-
   const localVideoRef = useRef(null);
   const remoteVideoRef = useRef(null);
 
   useEffect(() => {
-    // Create a new Peer instance
     const peer = new Peer();
 
-    // When the peer connects and gets an ID from the server
     peer.on("open", (id) => {
       console.log("My peer ID is: " + id);
       setPeerId(id);
     });
 
-    // When someone calls me
     peer.on("call", (call) => {
-      // Ask for permission to access camera + microphone
       navigator.mediaDevices
         .getUserMedia({ audio: true, video: true })
         .then((mediaStream) => {
-          // Show my video on the screen
           if (localVideoRef.current) {
             localVideoRef.current.srcObject = mediaStream;
           }
 
-          // Answer the incoming call with my stream
-          call.answer(mediaStream);
+          call.answer(mediaStream); // Answer incoming call
+          setCurrentCall(call); // Save the active call
 
-          // When I receive the remote video stream, show it
           call.on("stream", (remoteStream) => {
             if (remoteVideoRef.current) {
               remoteVideoRef.current.srcObject = remoteStream;
             }
           });
+
+          call.on("close", () => {
+            if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+            setCurrentCall(null);
+          });
         })
         .catch((err) => console.error("Failed to get local stream", err));
     });
 
-    peerInstance.current = peer; // Save instance
+    peerInstance.current = peer;
   }, []);
 
-  // Function to call another peer
   const call = (remotePeerIdValue) => {
     navigator.mediaDevices
       .getUserMedia({ audio: true, video: true })
       .then((mediaStream) => {
-        // Show my video
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = mediaStream;
         }
 
-        // Call the other peer with my stream
         const call = peerInstance.current.call(remotePeerIdValue, mediaStream);
+        setCurrentCall(call); // Save active call
 
-        // Show the remote stream when received
         call.on("stream", (remoteStream) => {
           if (remoteVideoRef.current) {
             remoteVideoRef.current.srcObject = remoteStream;
           }
         });
+
+        call.on("close", () => {
+          if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+          setCurrentCall(null);
+        });
       })
       .catch((err) => console.error("Failed to get local stream", err));
+  };
+
+  const endCall = () => {
+    if (currentCall) {
+      currentCall.close(); // Ends the call
+      setCurrentCall(null);
+      if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+    }
   };
 
   return (
@@ -101,9 +109,18 @@ const App = () => {
         />
         <button
           onClick={() => call(remotePeerId)}
-          className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold  active:scale-95 transition"
+          className="px-5 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-semibold active:scale-95 transition"
         >
           Call
+        </button>
+        <button
+          onClick={endCall}
+          disabled={!currentCall}
+          className={`px-5 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg font-semibold active:scale-95 transition ${
+            !currentCall ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+        >
+          End Call
         </button>
       </div>
 
@@ -131,8 +148,7 @@ const App = () => {
       </div>
 
       <footer className="mt-10 text-sm text-gray-500">
-        Built For Fun By {" "}
-        <span className="font-medium text-white">Ketan1317</span>
+        Built For Fun By <span className="font-medium text-white">Ketan1317</span>
       </footer>
     </div>
   );
